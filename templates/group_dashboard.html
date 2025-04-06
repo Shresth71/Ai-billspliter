@@ -1,0 +1,487 @@
+<html>
+<head>
+    <title>{{ group_name }} - AI Bill Splitter</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .expense-card {
+            transition: transform 0.2s;
+        }
+        .expense-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .tab-content {
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('home') }}">AI Bill Splitter</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('home') }}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="row mb-4 align-items-center">
+            <div class="col">
+                <h1>{{ group_name }}</h1>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                    <i class="fas fa-plus"></i> Add Expense
+                </button>
+                <button class="btn btn-info ms-2" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="fas fa-user-plus"></i> Add User
+                </button>
+            </div>
+        </div>
+        
+        <ul class="nav nav-tabs" id="groupTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" 
+                    type="button" role="tab" aria-selected="true">Dashboard</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="expenses-tab" data-bs-toggle="tab" data-bs-target="#expenses" 
+                    type="button" role="tab" aria-selected="false">All Expenses</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settlements-tab" data-bs-toggle="tab" data-bs-target="#settlements" 
+                    type="button" role="tab" aria-selected="false">Settlements</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="myexpenses-tab" data-bs-toggle="tab" data-bs-target="#myexpenses" 
+                    type="button" role="tab" aria-selected="false">My Expenses</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="groupTabContent">
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>Expense Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                <pre class="mb-0">{{ expense_summary }}</pre>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Recent Expenses</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if expenses %}
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Description</th>
+                                                    <th>Amount</th>
+                                                    <th>Paid By</th>
+                                                    <th>Date</th>
+                                                    <th>Category</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for expense in expenses[-5:]|reverse %}
+                                                <tr>
+                                                    <td>{{ expense.description }}</td>
+                                                    <td>₹{{ "%.2f"|format(expense.amount) }}</td>
+                                                    <td>{{ expense.paid_by }}</td>
+                                                    <td>{{ expense.date }}</td>
+                                                    <td>{{ expense.get('category', 'Uncategorized') }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <p class="text-center">No expenses recorded yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>Your Balance</h5>
+                            </div>
+                            <div class="card-body text-center">
+                                {% if user_info %}
+                                    {% if user_info.net_balance > 0 %}
+                                        <h2 class="text-success">₹{{ "%.2f"|format(user_info.net_balance) }}</h2>
+                                        <p>You are owed this amount</p>
+                                    {% elif user_info.net_balance < 0 %}
+                                        <h2 class="text-danger">₹{{ "%.2f"|format(user_info.net_balance|abs) }}</h2>
+                                        <p>You owe this amount</p>
+                                    {% else %}
+                                        <h2 class="text-info">₹0.00</h2>
+                                        <p>You're all settled up</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p>No expense data available yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Group Members</h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-group">
+                                    {% for user in group_users %}
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            {{ user }}
+                                            {% if user == session.username %}
+                                                <span class="badge bg-primary">You</span>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <form action="{{ url_for('upload_receipt', group_id=group_id) }}" method="post" enctype="multipart/form-data">
+                <label for="receipt_image">Upload Receipt Image:</label>
+                <input type="file" name="receipt_image" accept="image/*" required>
+                <button type="submit">Scan & Add Expense</button>
+            </form>
+              
+            
+            <!-- All Expenses Tab -->
+            <div class="tab-pane fade" id="expenses" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>All Expenses</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if expenses %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Description</th>
+                                            <th>Amount</th>
+                                            <th>Paid By</th>
+                                            <th>Date</th>
+                                            <th>Category</th>
+                                            <th>Participants</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for expense in expenses|reverse %}
+                                        <tr>
+                                            <td>{{ expense.id }}</td>
+                                            <td>{{ expense.description }}</td>
+                                            <td>₹{{ "%.2f"|format(expense.amount) }}</td>
+                                            <td>{{ expense.paid_by }}</td>
+                                            <td>{{ expense.date }}</td>
+                                            <td>{{ expense.get('category', 'Uncategorized') }}</td>
+                                            <td>{{ expense.participants|join(', ') }}</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" 
+                                                    data-bs-target="#categorizeExpenseModal" 
+                                                    data-expense-id="{{ expense.id }}">
+                                                    Categorize
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-center">No expenses recorded yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settlements Tab -->
+            <div class="tab-pane fade" id="settlements" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Settlements</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if settlements %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>From</th>
+                                            <th>To</th>
+                                            <th>Amount</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for settlement in settlements %}
+                                        <tr class="{% if settlement.from == session.username %}table-warning{% elif settlement.to == session.username %}table-info{% endif %}">
+                                            <td>{{ settlement.from }}</td>
+                                            <td>{{ settlement.to }}</td>
+                                            <td>₹{{ "%.2f"|format(settlement.amount) }}</td>
+                                            <td>
+                                                {% if settlement.from == session.username or settlement.to == session.username %}
+                                                    <span class="badge bg-warning text-dark">Pending</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">N/A</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-center">No settlements needed. Everyone is even!</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- My Expenses Tab -->
+            <div class="tab-pane fade" id="myexpenses" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>My Payment Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if user_info %}
+                                    <div class="row text-center">
+                                        <div class="col-md-4">
+                                            <h5>Total Paid</h5>
+                                            <h3 class="text-primary">₹{{ "%.2f"|format(user_info.total_paid) }}</h3>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <h5>Total Owed</h5>
+                                            <h3 class="text-danger">₹{{ "%.2f"|format(user_info.total_owed) }}</h3>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <h5>Net Balance</h5>
+                                            <h3 class="{% if user_info.net_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                                ₹{{ "%.2f"|format(user_info.net_balance) }}
+                                            </h3>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <p class="text-center">No expense data available yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>Expenses I Paid</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if user_info and user_info.paid_expenses %}
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Description</th>
+                                                    <th>Amount</th>
+                                                    <th>Date</th>
+                                                    <th>Category</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for expense in user_info.paid_expenses|reverse %}
+                                                <tr>
+                                                    <td>{{ expense.description }}</td>
+                                                    <td>₹{{ "%.2f"|format(expense.amount) }}</td>
+                                                    <td>{{ expense.date }}</td>
+                                                    <td>{{ expense.get('category', 'Uncategorized') }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <p class="text-center">You haven't paid any expenses yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Expense Modal -->
+    <div class="modal fade" id="addExpenseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Expense</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('add_expense', group_id=group_id) }}" method="post">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <input type="text" class="form-control" id="description" name="description" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="amount" class="form-label">Amount (₹)</label>
+                            <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="paid_by" class="form-label">Paid By</label>
+                            <select class="form-select" id="paid_by" name="paid_by" required>
+                                {% for user in group_users %}
+                                    <option value="{{ user }}" {% if user == session.username %}selected{% endif %}>{{ user }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="category" class="form-label">Category</label>
+                            <select class="form-select" id="category" name="category">
+                                <option value="">Select category (optional)</option>
+                                <option value="Food">Food</option>
+                                <option value="Rent">Rent</option>
+                                <option value="Utilities">Utilities</option>
+                                <option value="Entertainment">Entertainment</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Groceries">Groceries</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Split With</label>
+                            <div class="card">
+                                <div class="card-body">
+                                    {% for user in group_users %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="{{ user }}" id="participant_{{ user }}" name="participants" checked>
+                                            <label class="form-check-label" for="participant_{{ user }}">
+                                                {{ user }} {% if user == session.username %}(You){% endif %}
+                                            </label>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Expense</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add User Modal -->
+    <div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add User to Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('add_user_to_group', group_id=group_id) }}" method="post">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                            <div class="form-text">Enter the username of a registered user</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Categorize Expense Modal -->
+    <div class="modal fade" id="categorizeExpenseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Categorize Expense</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('categorize_expense', group_id=group_id) }}" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" id="expense_id" name="expense_id">
+                        <div class="mb-3">
+                            <label for="category_select" class="form-label">Select Category</label>
+                            <select class="form-select" id="category_select" name="category" required>
+                                <option value="Food">Food</option>
+                                <option value="Rent">Rent</option>
+                                <option value="Utilities">Utilities</option>
+                                <option value="Entertainment">Entertainment</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Groceries">Groceries</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Category</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Set expense ID in categorize modal
+        document.addEventListener('DOMContentLoaded', function() {
+            var categorizeModal = document.getElementById('categorizeExpenseModal');
+            if (categorizeModal) {
+                categorizeModal.addEventListener('show.bs.modal', function(event) {
+                    var button = event.relatedTarget;
+                    var expenseId = button.getAttribute('data-expense-id');
+                    var expenseIdInput = categorizeModal.querySelector('#expense_id');
+                    expenseIdInput.value = expenseId;
+                });
+            }
+        });
+    </script>
+</body>
+</html>
